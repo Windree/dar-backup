@@ -6,18 +6,19 @@ function get_docker_compose() {
 }
 
 function get_docker_status() {
-  [ -z "$(docker-compose -f "$docker_compose" top)" ] && (
+  if [ -z "$(docker-compose -f "$docker_compose" top)" ];then
     echo "stopped"
-  ) || (
+  else
     echo "running"
-  )
+  fi
 }
 
+LC_ALL=$(locale -a | grep -F _)
+docker_compose=$(get_docker_compose "$1")
+docker_status=$(get_docker_status "$docker_compose")
 dir=$(dirname "$(readlink -f -- "$0")")
 image=$(basename "$dir")-dar
 temp="$(mktemp --directory --tmpdir="$2")"
-docker_compose=$(get_docker_compose "$1")
-docker_status=$(get_docker_status "$docker_compose")
 
 function build_image() {
   docker build "$dir/dar/image" -t "$image"
@@ -65,26 +66,26 @@ function create_archive() {
   local last_dar=$(find "$2" -maxdepth 1 -type f -name "*.dar" -printf '%T@\t%p\n' | sort -n | tail -1 | cut -f2-)
   local last_archive=${last_dar%.*.*}
   if [ -z "$last_archive" ]; then
-    local archive=full
-    docker run --rm -v "$1:/files" -v "$temp:/data" "$image" --create "/data/full" --fs-root "/files" -Q --no-overwrite --compress=zstd >/dev/null
-    echo "$temp/$archive"
+    local name=full
+    docker run --rm -v "$1:/files" -v "$temp:/data" "$image" --create "/data/$name" --fs-root "/files" -Q --no-overwrite --compress=zstd >/dev/null
+    echo "$temp/$name"
   else
-    local archive=incremental-$(date +%F-%T | sed 's/:/-/g')
-    docker run --rm -v "$1:/files" -v "$temp:/data" -v "$last_dar:/ref.1.dar" "$image" --create "/data/$archive" --ref "/ref" --fs-root "/files" -Q --no-overwrite --compress=zstd >/dev/null
-    echo "$temp/$archive"
+    local name=incremental-$(date +%F-%T | sed 's/:/-/g')
+    docker run --rm -v "$1:/files" -v "$temp:/data" -v "$last_dar:/ref.1.dar" "$image" --create "/data/$name" --ref "/ref" --fs-root "/files" -Q --no-overwrite --compress=zstd >/dev/null
+    echo "$temp/$name"
   fi
 }
 
 function cleanup() {
-  [ "$docker_status" == "running" ] && (
+  if [ "$docker_status" == "running" ]; then
     start_docker "$docker_compose"
-  )
-  [ -d "$temp" ] && (
+  fi
+  if [ -d "$temp" ]; then
     rm -rf "$temp"
-  )
+  fi
 }
 
-trap cleanup EXIT
+trap cleanup exit
 
 build_image
 main "$1" "$2"
