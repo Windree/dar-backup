@@ -6,7 +6,7 @@ function get_docker_compose() {
 }
 
 function get_docker_status() {
-  if [ -z "$(docker-compose -f "$docker_compose" top)" ];then
+  if [ -z "$(docker-compose -f "$docker_compose" top)" ]; then
     echo "stopped"
   else
     echo "running"
@@ -21,7 +21,11 @@ image=$(basename "$dir")-dar
 temp="$(mktemp --directory --tmpdir="$2")"
 
 function build_image() {
-  docker build "$dir/dar/image" -t "$image"
+  local image_path=$dir/dar/image
+  if ! docker build --quiet "$image_path" -t "$image" 2>/dev/null >/dev/null; then
+    echo "Error build '$image_path'"
+    exit 1
+  fi
 }
 
 function main() {
