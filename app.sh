@@ -1,5 +1,8 @@
 #!/bin/env bash
 set -Eeuo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/functions/requires.sh"
+
+requires locale basename mktemp docker mv du numfmt
 
 function get_docker_compose() {
   echo "$1/docker-compose.yml"
@@ -13,7 +16,7 @@ function get_docker_status() {
   fi
 }
 
-LC_ALL=$(locale -a | grep -F _)
+locale=$((locale -a | grep en_AU || true) | head -n 1)
 docker_compose=$(get_docker_compose "$1")
 docker_status=$(get_docker_status "$docker_compose")
 dir=$(dirname "$(readlink -f -- "$0")")
@@ -48,7 +51,7 @@ function main() {
     echo "Test failed!"
     exit 1
   fi
-  echo "File: $(basename "$file")($(du --summarize --bytes "$file" | cut -f 1 | numfmt --grouping) bytes)"
+  echo "File: $(basename "$file")($(du --summarize --bytes "$file" | cut -f 1 | LC_ALL=$locale numfmt --grouping) bytes)"
   mv "$file" "$backup_path"
 }
 
@@ -71,11 +74,11 @@ function create_archive() {
   local last_archive=${last_dar%.*.*}
   if [ -z "$last_archive" ]; then
     local name=full
-    docker run --rm -v "$1:/files" -v "$temp:/data" "$image" --create "/data/$name" --fs-root "/files" -Q --no-overwrite --compress=zstd >/dev/null
+    docker run --rm -v "$1:/files" -v "$temp:/data" "$image" --create "/data/$name" --fs-root "/files" -Q --no-overwrite --compress=zstd 1>/dev/null
     echo "$temp/$name"
   else
     local name=incremental-$(date +%F-%T | sed 's/:/-/g')
-    docker run --rm -v "$1:/files" -v "$temp:/data" -v "$last_dar:/ref.1.dar" "$image" --create "/data/$name" --ref "/ref" --fs-root "/files" -Q --no-overwrite --compress=zstd >/dev/null
+    docker run --rm -v "$1:/files" -v "$temp:/data" -v "$last_dar:/ref.1.dar" "$image" --create "/data/$name" --ref "/ref" --fs-root "/files" -Q --no-overwrite --compress=zstd 1>/dev/null
     echo "$temp/$name"
   fi
 }
