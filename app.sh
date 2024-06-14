@@ -1,5 +1,5 @@
 #!/bin/env bash
-set -Eeuxo pipefail
+set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/functions/requires.sh"
 
 requires locale basename mktemp docker mv du numfmt
