@@ -1,5 +1,5 @@
 #!/bin/env bash
-set -Eeuo pipefail
+set -Eeuxo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/functions/requires.sh"
 
 requires locale basename mktemp docker mv du numfmt
@@ -9,7 +9,7 @@ function get_docker_compose() {
 }
 
 function get_docker_status() {
-  if [ -z "$(docker-compose -f "$docker_compose" top)" ]; then
+  if [ -z "$(docker compose -f "$docker_compose" top)" ]; then
     echo "stopped"
   else
     echo "running"
@@ -27,7 +27,7 @@ function build_image() {
   local image_path=$dir/dar/image
   if ! docker build --quiet "$image_path" -t "$image" 2>/dev/null >/dev/null; then
     echo "Error build '$image_path'"
-    exit 1
+    exit 255
   fi
 }
 
@@ -56,16 +56,16 @@ function main() {
 }
 
 function start_docker() {
-  if ! docker-compose -f "$docker_compose" up -d; then
+    if ! docker compose -f "$docker_compose" up -d; then
     echo error starting container
-    exit
+    exit 2
   fi
 }
 
 function stop_docker() {
-  if ! docker-compose -f "$docker_compose" stop; then
+  if ! docker compose -f "$docker_compose" stop; then
     echo error stopping container
-    exit
+    exit 3
   fi
 }
 
