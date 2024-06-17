@@ -68,7 +68,7 @@ function main() {
         echo "Test failed!"
         exit 10
     fi
-    echo "File: $(basename "$file")($(du --summarize --bytes "$file" | cut -f 1 | LC_ALL=$locale numfmt --grouping) bytes)"
+    echo "File: $(basename "$file") ($(du --summarize --bytes "$file" | cut -f 1 | LC_ALL=$locale numfmt --grouping) bytes)"
     mv "$file" "$backup_path"
 }
 
