@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/functions/requires.sh"
 
-requires locale basename mktemp docker mv du
+requires basename mktemp docker mv du
 
 function check_source(){
     if [ -d "$1" ]; then
