@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/functions/requires.sh"
 
-requires locale basename mktemp docker mv du numfmt
+requires locale basename mktemp docker mv du
 
 function check_source(){
     if [ -d "$1" ]; then
@@ -33,16 +33,21 @@ function get_docker_status() {
 check_source "${2:-}"
 check_target "${1:-}"
 
-locale=$((locale -a | grep en_AU || true) | head -n 1)
 docker_compose=$2/docker-compose.yml
 docker_status=$(get_docker_status "$docker_compose")
 dir=$(dirname "$(readlink -f -- "$0")")
-image=$(basename "$dir")-dar
+dar_image=$(basename "$dir")-dar
+numfmt_image=$(basename "$dir")-numfmt
 temp="$(mktemp --directory --tmpdir="$1")"
 
 function build_image() {
-    local image_path=$dir/dar/image
-    if ! docker build --quiet "$image_path" -t "$image" 2>/dev/null >/dev/null; then
+    local dar_image_path=$dir/dar/image
+    local numfmt_image_path=$dir/numfmt/image
+    if ! docker build --quiet "$dar_image_path" -t "$dar_image" 2>/dev/null >/dev/null; then
+        echo "Error build '$image_path'"
+        exit 255
+    fi
+    if ! docker build --quiet "$numfmt_image_path" -t "$numfmt_image" 2>/dev/null >/dev/null; then
         echo "Error build '$image_path'"
         exit 255
     fi
@@ -64,11 +69,11 @@ function main() {
     docker_status=""
     echo "Testing..."
     local file=$archive.1.dar
-    if ! docker run --rm -v "$file:/data.1.dar" "$image" --test "/data" -Q; then
+    if ! docker run --rm -v "$file:/data.1.dar" "$dar_image" --test "/data" -Q; then
         echo "Test failed!"
         exit 10
     fi
-    echo "File: $(basename "$file") ($(du --summarize --bytes "$file" | cut -f 1 | LC_ALL=$locale numfmt --grouping) bytes)"
+    echo "File: $(basename "$file") ($(du --summarize --bytes "$file" | cut -f 1 | format_number --grouping) bytes)"
     mv "$file" "$backup_path"
 }
 
@@ -91,13 +96,17 @@ function create_archive() {
     local last_archive=${last_dar%.*.*}
     if [ -z "$last_archive" ]; then
         local name=full
-        docker run --rm -v "$1:/files" -v "$temp:/data" "$image" --create "/data/$name" --fs-root "/files" -Q --no-overwrite --compress=zstd 1>/dev/null
+        docker run --rm -v "$1:/files" -v "$temp:/data" "$dar_image" --create "/data/$name" --fs-root "/files" -Q --no-overwrite --compress=zstd 1>/dev/null
         echo "$temp/$name"
     else
         local name=incremental-$(date +%F-%T | sed 's/:/-/g')
-        docker run --rm -v "$1:/files" -v "$temp:/data" -v "$last_dar:/ref.1.dar" "$image" --create "/data/$name" --ref "/ref" --fs-root "/files" -Q --no-overwrite --compress=zstd 1>/dev/null
+        docker run --rm -v "$1:/files" -v "$temp:/data" -v "$last_dar:/ref.1.dar" "$dar_image" --create "/data/$name" --ref "/ref" --fs-root "/files" -Q --no-overwrite --compress=zstd 1>/dev/null
         echo "$temp/$name"
     fi
+}
+
+function format_number(){
+    docker run -i --rm "$numfmt_image" "$@"
 }
 
 function cleanup() {

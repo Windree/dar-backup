@@ -1,3 +1,6 @@
 [submodule "functions"]
 	path = functions
 	url = git@github.com:Windree/bash-functions.git
+[submodule "numfmt"]
+	path = numfmt
+	url = git@github.com:Windree/numfmt.git
