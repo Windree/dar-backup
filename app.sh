@@ -96,11 +96,11 @@ function create_archive() {
     local last_archive=${last_dar%.*.*}
     if [ -z "$last_archive" ]; then
         local name=full
-        docker run --rm -v "$1:/files" -v "$temp:/data" "$dar_image" --create "/data/$name" --fs-root "/files" -Q --no-overwrite --compress=zstd 1>/dev/null
+        docker run --rm -v "$1:/files" -v "$temp:/data" "$dar_image" --create "/data/$name" --fs-root "/files" --slice 200M -Q --no-overwrite --compress=zstd 1>/dev/null
         echo "$temp/$name"
     else
         local name=incremental-$(date +%F-%T | sed 's/:/-/g')
-        docker run --rm -v "$1:/files" -v "$temp:/data" -v "$last_dar:/ref.1.dar" "$dar_image" --create "/data/$name" --ref "/ref" --fs-root "/files" -Q --no-overwrite --compress=zstd 1>/dev/null
+        docker run --rm -v "$1:/files" -v "$temp:/data" -v "$last_dar:/ref.1.dar" "$dar_image" --create "/data/$name" --ref "/ref" --fs-root "/files" --slice 200M -Q --no-overwrite --compress=zstd 1>/dev/null
         echo "$temp/$name"
     fi
 }
