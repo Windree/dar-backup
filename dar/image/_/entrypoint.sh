@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-set -Eeuxo pipefail
+set -Eeuo pipefail
 
-function create() 
-{
-    local source=/app/mailu
-    local target=/tmp/web
+function create() {
+    local source=/source
+    local target=/data
     local temp=$target/$1
     shift
     mkdir -p "$temp"
@@ -13,32 +12,36 @@ function create()
     if [ -z "$last_archive" ]; then
         local name=full
         echo "Creating full archive '$name'."
-        dar --create "$temp/$name" --fs-root "$source" --slice 200M -Q --no-overwrite --compress=zstd 1>/dev/null
+        dar --create "$temp/$name" --fs-root "$source" -Q --no-overwrite --compress=zstd "$@" 1>/dev/null
     else
         local name=incremental-$(date +%Y%m%d-%H%M%S)
         echo "Creating incremental archive '$name'."
-        dar --create "$temp/$name" --ref "$last_archive" --fs-root "$source" --slice 200M -Q --no-overwrite --compress=zstd 1>/dev/null
+        dar --create "$temp/$name" --ref "$last_archive" --fs-root "$source" -Q --no-overwrite --compress=zstd "$@" 1>/dev/null
     fi
 }
 
 function test() {
     echo "Testing..."
-    local data=/tmp/web/$1
+    local data=/data
+    local files_count=0
     while IFS="" read -r dar || [ -n "$dar" ]; do
         echo "Testing '$dar'"
-        if ! dar --test "$data/$dar" -Q; then
+        files_count=$((files_count+1))
+        if ! dar --test "$data/$dar" -Q "$@"; then
             echo "Test failed!"
             exit 1
         fi
         local size=$(du --total --bytes "$data"/"$dar".*.* | tail -n 1 | cut -f 1 | numfmt --grouping)
         echo "File: '$dar' ($size bytes)"
-
     done < <(find "$data" -maxdepth 1 -type f -name "*.*.dar" | grep -oP '[^/]+(?=\.\d+\.dar)' | sort | uniq)
+    if [ $files_count -eq 0 ]; then
+        echo "Failed to find files to test"
+        exit 2
+    fi
 }
 
 if [ $# -lt 1 ]; then
-    echo "At least 1 arguments required."
-    echo "create /source /target"
+    echo "At least 1 arguments required. create or test"
     exit -1
 fi
 
