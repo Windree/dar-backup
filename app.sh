@@ -70,7 +70,6 @@ function main() {
         stop_docker "$source_path"
     fi
 
-    echo "Creating archive..."
     docker run --rm -v "$source_path:/source" -v "$backup_path:/data" "$dar_image" create "$temp" "$@"
 
     if [ "$docker_status" == "running" ]; then
