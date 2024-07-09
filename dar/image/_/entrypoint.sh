@@ -40,11 +40,31 @@ function test() {
             echo "Test failed!"
             exit 1
         fi
-    done < <(find "$data" -maxdepth 1 -type f -name "*.*.dar" | grep -oP '[^/]+(?=\.\d+\.dar)' | sort | uniq)
+    done < <(get_archives "$data")
     if [ $files_count -eq 0 ]; then
         echo "Failed to find files to test!"
         exit 2
     fi
+}
+
+function restore() {
+    local data=/data
+    local data=/target
+    local archives=$(get_archives "$data")
+    local count=$(cat "$archives" | wc -l)
+    local index=0
+    while IFS="" read -r dar || [ -n "$dar" ]; do
+        index=$((index + 1))
+        echo "$index/$count: Unpacking '$dar'"
+        if ! dar --extract "$dar" --fs-root="$data" -Q --verbose=treated "$@"; then
+            echo "$index/$count: Failed to unpacking '$dar'"
+            exit 1
+        fi
+    done <<<"$archives"
+}
+
+function get_archives() {
+    find "$1" -maxdepth 1 -type f -name "*.*.dar" | grep -oP '[^/]+(?=\.\d+\.dar)' | sort | uniq
 }
 
 if [ $# -lt 1 ]; then
@@ -52,14 +72,17 @@ if [ $# -lt 1 ]; then
     exit -1
 fi
 
-case "$1" in
+action=$1
+shift
+case "$action" in
 "create")
-    shift
     create "$@"
     ;;
 "test")
-    shift
     test "$@"
+    ;;
+"restore")
+    restore "$@"
     ;;
 *)
     echo "Unsupported action '$1'"
