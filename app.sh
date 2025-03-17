@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-docker_compose=
-docker_status=
-dir=$(dirname "$(readlink -f -- "$0")")
-dar_image=$(basename "$dir")-dar
-temp=$(basename "$(mktemp --dry-run)")
-log=$(mktemp --dry-run)
+declare dir=$(dirname "$(readlink -f -- "$0")")
+declare dar_image=$(basename "$dir")-dar
+declare temp=$(basename "$(mktemp --dry-run)")
+declare log=$(mktemp --dry-run)
 
 function build_image() {
     local dar_image_path=$dir/dar/image
@@ -30,21 +28,19 @@ function create() {
     local source_path=$2
     shift 2
     
-    export docker_compose=$source_path/docker-compose.yml
-    export docker_status=$(get_docker_status "$docker_compose")
+    export docker_compose="$source_path/docker-compose.yml"
+    export backup_before="$source_path/backup/before"
+    export backup_after="$source_path/backup/after"
 
-    if [ "$docker_status" == "running" ]; then
-        echo "Stoping docker..."
-        stop_docker "$source_path"
+    if [ -x "$backup_before" ]; then 
+        "$backup_before"
     fi
 
     docker run --rm -v "$source_path:/source" -v "$archive_path:/data" "$dar_image" create "$temp" "$@"
 
-    if [ "$docker_status" == "running" ]; then
-        echo "Staring docker..."
-        start_docker "$source_path"
+    if [ -x "$backup_after" ]; then 
+        "$backup_after"
     fi
-    docker_status=""
 
     if ! docker run --rm -v "$archive_path/$temp:/data" "$dar_image" test; then
         exit 1
@@ -66,39 +62,12 @@ function extract() {
     local target_path=$2
     shift 2
 
-    docker run --rm -v "$target_path:/target" -v "$archive_path:/data" "$dar_image" extract "$@"
+    docker run --rm -v "$1:/target" -v "$2:/data" "$dar_image" extract "$@"
     echo "Result: OK."
-}
-
-function get_docker_status() {
-    if [ ! -f "$1" ]; then
-        echo ""
-    elif [ -z "$(docker compose -f "$1" top)" ]; then
-        echo "stopped"
-    else
-        echo "running"
-    fi
-}
-
-function start_docker() {
-    if ! docker compose -f "$docker_compose" up -d; then
-        echo Error starting container
-        exit 2
-    fi
-}
-
-function stop_docker() {
-    if ! docker compose -f "$docker_compose" stop; then
-        echo Error stopping container
-        exit 2
-    fi
 }
 
 
 function cleanup() {
-    if [ "$docker_status" == "running" ] && [ -n "$docker_compose" ]; then
-        start_docker "$docker_compose"
-    fi
     if [ -d "$temp" ]; then
         rm -rf "$temp"
     fi
