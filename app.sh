@@ -62,7 +62,7 @@ function extract() {
     local target_path=$2
     shift 2
 
-    docker run --rm -v "$1:/target" -v "$2:/data" "$dar_image" extract "$@"
+    docker run --rm -v "$archive_path:/data" -v "$target_path:/target" "$dar_image" extract "$@"
     echo "Result: OK."
 }
 
