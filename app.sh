@@ -19,9 +19,11 @@ function build_image() {
 function create() {
     if [ ! -v 1 ] || [ ! -d "$1" ]; then
         echo "Archive directory '$1' not found"
+        exit 1
     fi
     if [ ! -v 2 ] || [ ! -d "$2" ]; then
         echo "Source directory '$2' not found"
+        exit 1
     fi
 
     local archive_path=$1
