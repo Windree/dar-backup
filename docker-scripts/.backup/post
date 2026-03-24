@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+declare root="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")")"
+(cd "$root" && docker compose up -d)

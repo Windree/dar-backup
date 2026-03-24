@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+declare root="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")")"
+declare ids=$(cd "$root" && docker compose ps --status=running --quiet)
+[ ! -z "$ids" ] && (cd "$root" && docker compose stop) || exit 1

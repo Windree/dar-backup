@@ -5,6 +5,9 @@ declare dir="$(dirname "$(readlink -f -- "$0")")"
 declare temp_name="$(basename "$(mktemp --dry-run)")"
 declare dar_image="dar-$(echo "$dir" | md5sum | awk '{ print $1 }')"
 declare log="$(mktemp)"
+declare pending=false
+declare pre_backup=""
+declare post_backup=""
 
 function build_image() {
     local dar_image_path="$dir/dar/image"
@@ -33,19 +36,22 @@ function create() {
     local source_dir="$2"
     shift 2
     
-    local docker_compose="$source_dir/docker-compose.yml"
-    local run_before="$source_dir/.backup/before"
-    local run_after="$source_dir/.backup/after"
+    pre_backup="$source_dir/.backup/pre"
+    post_backup="$source_dir/.backup/post"
 
-    if [ -x "$run_before" ]; then 
-        "$run_before"
+    if [ -x "$pre_backup" ]; then 
+        if "$pre_backup"; then
+            pending=true
+        fi
     fi
 
     docker run --rm -v "$source_dir:/source" -v "$archive_dir:/data" "$dar_image" create "$temp_name" "$@"
 
-    if [ -x "$run_after" ]; then 
-        "$run_after"
+    if [ -x "$post_backup" ] &&  $pending; then 
+        "$post_backup"
     fi
+    
+    pending=false
 
     if ! verify "$archive_dir/$temp_name"; then
         echo "An archive validation failed"
@@ -97,6 +103,9 @@ function verify() {
 }
 
 function cleanup() {
+    if $pending && [ -x "$post_backup" ]; then 
+        "$post_backup"
+    fi
     [ -f "$log" ] && rm -f "$log"
 }
 
