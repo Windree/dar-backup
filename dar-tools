@@ -158,11 +158,11 @@ function compare
         exit 1
     end
     
-    set -l source_temp (mktemp --directory --tmpdir="$temp_dir")
-    set -g temp_files $temp_files $source_temp
-    
-    set -l archive_temp (mktemp --directory --tmpdir="$temp_dir")
-    set -g temp_files $temp_files $archive_temp
+    set -l temp (mktemp --directory --tmpdir="$temp_dir")
+    set -a temp_files $temp
+    set -l source_temp "$temp/source"
+    set -l archive_temp "$temp/archive"
+    mkdir "$source_temp" "$archive_temp"
 
     if before_docker_snapshot "$source"
         log_info "Docker container restart queued"
@@ -246,7 +246,7 @@ function on_exit --on-event fish_exit
     end
     set -l count (count $temp_files)
     if test $count -gt 0
-        log_info "Cleaning up $count files or directories"
+        log_info "Cleaning up $count temporary files or directories"
         rm -rf $temp_files
     end
 end
