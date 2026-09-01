@@ -189,9 +189,11 @@ function compare
     log_info "Extracting the archive '$archive_dir'"
     extract "$archive_dir" "$archive_temp" -O
     
-    if not diff -rq "$source_temp" "$archive_temp"
+    set results (diff -rq "$source_temp" "$archive_temp" | grep -vE " is a socket|Special file" &| string collect)
+
+    if test (count $results) -gt 0
         log_error "Source and archive are not equal"
-        remove "$source_temp" "$archive_temp"
+        printf "%s\n" $results
         exit 1
     end
     log_success "Source and archive are equal"
