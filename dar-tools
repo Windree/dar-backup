@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# set -g fish_trace 0
+# set -g fish_trace 1
 set -g temp_files
 set -g docker_compose_directory ""
 set -g docker_compose_timeout 60
@@ -29,20 +29,27 @@ function create
         log_info "Docker compose restart queued"
         set -g docker_compose_directory "$source"
     end
-
+    # dar directly opens the target files using special filesystem performance flags that unprivileged user namespaces (rootlesskit) actively block. Use -aa tag to block read ataime
+    set -l common_flags "-aa" "-Q" "--no-overwrite" "--compress=zstd"
     if test -z "$last_dar"
         set -l name "full"
         log_info "Creating an archive: '$name'"
-        if not dar --create "$temp/$name" --fs-root "$source" -Q --no-overwrite --compress=zstd $argv >/dev/null
+        set dar_output (dar --create "$temp/$name" --fs-root "$source" $common_flags $argv &| string collect)
+        if test $status -ne 0
             log_error "Failed to create an archive: '$name'"
+            # Print the captured output and warnings
+            log_error "$dar_output"
             exit 1
         end
     else
         set -l last_ref (string replace -r '\.[^.]+\.[^.]+$' '' $last_dar)
         set -l name "incremental-"(date +%Y%m%d-%H%M%S)
         log_info "Creating an incremental archive '$name' based on '$last_ref'."
-        if not dar --create "$temp/$name" --ref "$last_ref" --fs-root "$source" -Q --no-overwrite --compress=zstd $argv >/dev/null
+        set dar_output (dar --create "$temp/$name" --ref "$last_ref" --fs-root "$source" $common_flags $argv &| string collect)
+        if test $status -ne 0
             log_error "Failed to create an incremental archive"
+            # Print the captured output and warnings
+            log_error "$dar_output"
             exit 1
         end
     end
