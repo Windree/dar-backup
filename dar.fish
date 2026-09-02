@@ -31,22 +31,20 @@ function create
     set -l common_flags "-aa" "-Q" "--no-overwrite" "--compress=zstd"
     if test -z "$last_dar"
         set -l name "full"
-        log_info "Creating an archive: '$name'"
+        log_info "Creating full archive: '$name'"
         set dar_output (dar --create "$temp/$name" --fs-root "$source" $common_flags $argv &| string collect)
         if test $status -ne 0
-            log_error "Failed to create an archive: '$name'"
-            # Print the captured output and warnings
+            log_error "Failed to create full archive: '$name'"
             log_error "$dar_output"
             exit 1
         end
     else
         set -l last_ref (string replace -r '\.[^.]+\.[^.]+$' '' $last_dar)
         set -l name "incremental-"(date +%Y%m%d-%H%M%S)
-        log_info "Creating an incremental archive '$name' based on '$last_ref'."
+        log_info "Creating incremental archive '$name' based on '$last_ref'."
         set dar_output (dar --create "$temp/$name" --ref "$last_ref" --fs-root "$source" $common_flags $argv &| string collect)
         if test $status -ne 0
-            log_error "Failed to create an incremental archive"
-            # Print the captured output and warnings
+            log_error "Failed to create incremental archive: '$name'"
             log_error "$dar_output"
             exit 1
         end
@@ -58,13 +56,13 @@ function create
     set -l count (find "$temp" -type f | wc -l)
     
     if not mv "$temp"/* "$target"
-        log_error "Failed to move created archive to the persistent storage"
+        log_error "Failed to move created archive to persistent storage."
         exit 1
     end
 
-    log_success "Archive created successfully"
-    log_info "Size: $size bytes"
-    log_info "Files: $count"
+    log_success "Archive created successfully."
+    log_info "Archive size: $size bytes"
+    log_info "Total files: $count"
 end
 
 function extract
@@ -84,7 +82,7 @@ function extract
 
     set -l count (get_archives "$archive_dir" | wc -l)
     if test $count -eq 0
-        log_error "No archives found in the directory"
+        log_error "No archives found inside target directory."
         exit 2
     end
     
@@ -93,16 +91,16 @@ function extract
     set -l index 0
     get_archives "$archive_dir" | while read -l archive_basename
         set index (math $index + 1)
-        log_info "[$index/$count] extracting '$archive_basename'"
+        log_info "[$index/$count] Extracting '$archive_basename'..."
         if not dar -x "$archive_dir/$archive_basename" --fs-root="$target" -Q --quiet -w -ae $argv
-            log_error "[$index/$count] extraction of '$archive_basename' failed"
+            log_error "[$index/$count] Extraction of '$archive_basename' failed."
             exit 1
         end
     end
 
     restore_docker_compose_state
 
-    log_success "Completed"
+    log_success "Extraction completed successfully."
 end
 
 function verify
@@ -117,7 +115,7 @@ function verify
     set -l total (get_archives "$archive_dir" | wc -l)
     
     if test $total -eq 0
-        log_error "Directory found but there no archives"
+        log_error "No archives found inside target directory."
         exit 2
     end
 
@@ -125,13 +123,13 @@ function verify
     get_archives "$archive_dir" | while read -l archive_basename
         set index (math $index + 1)
         
-        log_info "[$index/$total] verifying '$archive_basename'"
+        log_info "[$index/$total] Verifying '$archive_basename'..."
         if not dar --test "$archive_dir/$archive_basename" -Q --quiet $argv
-            log_error "[$index/$total] verification of '$archive_basename' failed"
+            log_error "[$index/$total] Verification of '$archive_basename' failed."
             exit 1
         end
     end
-    log_success "No errors found"
+    log_success "Verification passed. No errors found."
 end
 
 function compare
@@ -163,42 +161,43 @@ function compare
 
     save_docker_compose_state "$source"
 
-    log_info "Creating temporary copy of the '$source'"
+    log_info "Creating temporary copy of source directory..."
     cp -r "$source/." "$source_temp"
 
     restore_docker_compose_state
 
-    log_info "Extracting the archive '$archive_dir'"
+    log_info "Extracting files from archive..."
     extract "$archive_dir" "$archive_temp" -O $argv
     
     set results (diff -rq "$source_temp" "$archive_temp" | grep -vE " is a socket|Special file" &| string collect)
 
     if test (count $results) -gt 0
-        log_error "Source and archive are not equal"
+        log_error "Mismatches discovered: Source and archive files are not equal."
         printf "%s\n" $results
         exit 1
     end
-    log_success "Source and archive are equal"
+    log_success "Verification passed: Source and archive files match perfectly."
 end
 
 function save_docker_compose_state
     is_docker_compose_stopped "$argv[1]"; and return 0
     set -g docker_compose_directory "$argv[1]"
-    log_info "Stopping the docker compose"
+    log_info "Stopping Docker Compose containers..."
     if not stop_docker_containers "$argv[1]"
-        log_error "Failed to stop docker compose"
+        log_error "Failed to stop Docker Compose containers."
         exit 1
     end
-    log_info "Docker compose restart queued"
+    log_info "Docker Compose containers stopped. Restart event queued."
 end
 
 function restore_docker_compose_state
     test -z "$docker_compose_directory"; and return 0
-    log_info "Executing queued docker compose restart"
+    log_info "Executing queued Docker Compose restart..."
     if not start_docker_containers "$docker_compose_directory"
-        log_error "Failed to restart docker containers"
+        log_error "Failed to restart Docker Compose containers."
         exit 1
     end
+    log_info "Docker Compose containers restarted successfully."
     set -g docker_compose_directory ""
 end
 
@@ -244,30 +243,31 @@ function remove
 end
 
 function log_info
-    set_color cyan; echo -s "ℹ️  Info: " $argv; set_color normal
+    set_color cyan; echo -s "ℹ️  Info:    " $argv; set_color normal
 end
 
 function log_success
-    set_color green; echo -s "✅ OK: " $argv; set_color normal
+    set_color green; echo -s "✅ Success: " $argv; set_color normal
 end
 
 function log_error
-    set_color red; echo -s "❌ Error: " $argv; set_color normal
+    set_color red; echo -s "❌ Error:   " $argv; set_color normal
 end
 
 function on_exit --on-event fish_exit
     if test -n "$docker_compose_directory"
-        log_error "Docker compose restart still queued before exit the program"
+        log_error "Exiting while a Docker Compose restart was still pending."
+        log_info "Trying Docker Compose restart."
         if start_docker_containers "$docker_compose_directory"
-            log_info "Docker compose restarted on exit"
+            log_info "Docker Compose emergency restarted on exit routine."
         else
-            log_error "Failed to start docker compose on exit"
+            log_error "Failed to restart Docker Compose on exit routine."
             exit 2
         end
     end
     set -l count (count $temp_files)
     if test $count -gt 0
-        log_info "Cleaning up $count temporary files or directories"
+        log_info "Cleaning up $count temporary workspace files or directories..."
         rm -rf $temp_files
     end
 end
