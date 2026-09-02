@@ -1,0 +1,3 @@
+[submodule "scripts/.docker/backup"]
+	path = scripts/.docker/backup
+	url = git@github.com:Windree/docker-app-scripts-backup.git
