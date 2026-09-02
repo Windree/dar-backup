@@ -3,7 +3,7 @@
 set -g temp_files
 set -g docker_compose_directory ""
 set -g docker_compose_timeout 60
-set -g docker_backup_scripts_path ".docker/backup"
+set -g docker_backup_service ".docker/backup/service"
 
 function create
     set -l source "$argv[2]"
@@ -21,7 +21,7 @@ function create
     end
     
     set -l temp (mktemp --directory --tmpdir="$target")
-    set -g temp_files $temp_files $temp
+    set -a temp_files $temp
     
     set -l last_dar (find_last_archive "$target")
 
@@ -56,7 +56,12 @@ function create
 
     set -l size (du --total --bytes "$temp" | tail -n 1 | cut -f 1)
     set -l count (find "$temp" -type f | wc -l)
-    mv "$temp"/* "$target"
+    
+    if not mv "$temp"/* "$target"
+        log_error "Failed to move created archive to the persistent storage"
+        exit 1
+    end
+
     log_success "Archive created successfully"
     log_info "Size: $size bytes"
     log_info "Files: $count"
@@ -79,17 +84,17 @@ function extract
 
     set -l count (get_archives "$archive_dir" | wc -l)
     if test $count -eq 0
-        log_error "Directory found but there no archives"
+        log_error "No archives found in the directory"
         exit 2
     end
     
-    save_docker_compose_state "$source"
+    save_docker_compose_state "$target"
 
     set -l index 0
     get_archives "$archive_dir" | while read -l archive_basename
         set index (math $index + 1)
         log_info "[$index/$count] extracting '$archive_basename'"
-        if not dar -x "$archive_dir/$archive_basename" $argv --fs-root="$target" -Q --quiet -w -ae
+        if not dar -x "$archive_dir/$archive_basename" --fs-root="$target" -Q --quiet -w -ae $argv
             log_error "[$index/$count] extraction of '$archive_basename' failed"
             exit 1
         end
@@ -156,7 +161,7 @@ function compare
     set -l archive_temp "$temp/archive"
     mkdir "$source_temp" "$archive_temp"
 
-    save_docker_compose_state
+    save_docker_compose_state "$source"
 
     log_info "Creating temporary copy of the '$source'"
     cp -r "$source/." "$source_temp"
@@ -164,7 +169,7 @@ function compare
     restore_docker_compose_state
 
     log_info "Extracting the archive '$archive_dir'"
-    extract "$archive_dir" "$archive_temp" -O
+    extract "$archive_dir" "$archive_temp" -O $argv
     
     set results (diff -rq "$source_temp" "$archive_temp" | grep -vE " is a socket|Special file" &| string collect)
 
@@ -177,10 +182,10 @@ function compare
 end
 
 function save_docker_compose_state
-    test ! is_snapshot_required "$source"; and return
-    set -g docker_compose_directory "$source"
+    is_docker_compose_stopped "$argv[1]"; and return 0
+    set -g docker_compose_directory "$argv[1]"
     log_info "Stopping the docker compose"
-    if ! stop_docker_containers "$source"
+    if not stop_docker_containers "$argv[1]"
         log_error "Failed to stop docker compose"
         exit 1
     end
@@ -188,25 +193,33 @@ function save_docker_compose_state
 end
 
 function restore_docker_compose_state
-    test -z "$docker_compose_directory"; and return
+    test -z "$docker_compose_directory"; and return 0
     log_info "Executing queued docker compose restart"
-    start_docker_containers "$source"
-    if test $status -ne 0 
+    if not start_docker_containers "$docker_compose_directory"
         log_error "Failed to restart docker containers"
         exit 1
     end
     set -g docker_compose_directory ""
 end
 
-function stop_docker_containers
-    set -l file "$argv[1]/$docker_backup_scripts_path/before"
-    test -x "$file"; and timeout $docker_compose_timeout "$file"; and return
+function is_docker_compose_stopped
+    set -l file "$argv[1]/$docker_backup_service"
+    set -l state (timeout $docker_compose_timeout "$file" state)
+    test "$state" = "none"; and return 0
     return 1
 end
 
 function start_docker_containers
-    set -l file "$argv[1]/$docker_backup_scripts_path/after"
-    test -x "$file"; and timeout $docker_compose_timeout "$file"; and return
+    set -l file "$argv[1]/$docker_backup_service"
+    test ! -x "$file"; and return 0
+    timeout $docker_compose_timeout "$file" start
+    return $status
+end
+
+function stop_docker_containers
+    set -l file "$argv[1]/$docker_backup_service"
+    test ! -x "$file"; and return 0
+    timeout $docker_compose_timeout "$file" stop; and return 0
     return 1
 end
 
@@ -259,13 +272,8 @@ function on_exit --on-event fish_exit
     end
 end
 
-if test (count $argv) -lt 1
-    echo "Usage: $_ {create|extract|verify} [args]"
-    exit 1
-end
-
 set -l action $argv[1]
-set -e argv[1] # Shift action out of arguments array
+set -e argv[1]
 
 
 switch "$action"
@@ -278,6 +286,11 @@ switch "$action"
     case compare
         compare $argv
     case '*'
-        log_error "Unsupported action '$action'"
+        echo ""
+        echo "Usage:"
+        echo "  $_ create  <target_dir> <source_dir> [dar_flags...]  - Create full or incremental backup"
+        echo "  $_ extract <archive_dir> <target_dir> [dar_flags...] - Extract archives sequentially"
+        echo "  $_ verify  <archive_dir> [dar_flags...]              - Test integrity of archives"
+        echo "  $_ compare <archive_dir> <source_dir> <temp_dir>     - Compare filesystem state against archives using temporary directory"
         exit 1
 end
