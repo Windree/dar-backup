@@ -1,0 +1,5 @@
+/app/dar-tools/dar.fish create /app/tmp/ /app/test --slice 1G --delta sig
+/app/dar-tools/dar.fish compare /app/tmp/ /app/test /app/tmp
+/app/dar-tools/dar.fish extract /app/tmp/ /app/tmp/1
+/app/dar-tools/dar.fish extract /app/tmp/ /app/tmp/1 -OW
+/app/dar-tools/dar.fish verify /app/tmp/
