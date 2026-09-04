@@ -1,5 +1,6 @@
 #!/usr/bin/env fish
 # set -g fish_trace 1
+
 set -g temp_files
 set -g docker_compose_directory ""
 set -g docker_compose_action_timeout 120
@@ -67,9 +68,13 @@ function create
 end
 
 function extract
-    set -l archive_dir "$argv[1]"
-    set -l target "$argv[2]"
-    set -e argv[1..2]
+    argparse --ignore-unknown 's/stop-at=' -- $argv
+    set -l stop_at $_flag_stop_at
+
+    argparse --ignore-unknown -- $argv
+    set -l archive_dir $argv[1]
+    set -l target $argv[2]
+    set -l dar_args $argv[3..-1]
 
     if not test_readable "$archive_dir"
         log_error "Archive directory '$archive_dir' is not readable or does not exist."
@@ -93,10 +98,14 @@ function extract
     get_archives "$archive_dir" | while read -l archive_basename
         set index (math $index + 1)
         log_info "[$index/$count] Extracting '$archive_basename'..."
-        if not dar -x "$archive_dir/$archive_basename" --fs-root="$target" -Q --quiet -w -ae $argv
+        if not dar -x "$archive_dir/$archive_basename" --fs-root="$target" -Q --quiet -w -ae $dar_args
             log_error "[$index/$count] Extraction of '$archive_basename' failed."
             exit 1
         end
+        if test "$archive_basename" = "$stop_at"
+            log_info "The required archive reached. Stop processing"
+            break
+        end    
     end
 
     restore_docker_compose_state
