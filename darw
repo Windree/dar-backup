@@ -21,18 +21,18 @@ function create
         log_error "Source directory '$source' is not readable or does not exist."
         exit 1
     end
-    
+
     set -l temp (mktemp --directory --tmpdir="$target")
     set -a temp_files $temp
-    
+
     set -l last_dar (find_last_archive "$target")
 
     save_docker_compose_state "$source"
 
     # dar directly opens the target files using special filesystem performance flags that unprivileged user namespaces (rootlesskit) actively block. Use -aa tag to block read ataime
-    set -l common_flags "-aa" "-Q" "--no-overwrite" "--compress=zstd"
+    set -l common_flags -aa -Q --no-overwrite
     if test -z "$last_dar"
-        set -l name "full"
+        set -l name full
         log_info "Creating full archive: '$name'"
         set dar_output (dar --create "$temp/$name" --fs-root "$source" $common_flags $argv 2>&1 | string collect)
         if test $status -ne 0
@@ -56,7 +56,7 @@ function create
 
     set -l size (du --total --bytes "$temp" | tail -n 1 | cut -f 1)
     set -l count (find "$temp" -type f | wc -l)
-    
+
     if not mv "$temp"/* "$target"
         log_error "Failed to move created archive to persistent storage."
         exit 1
@@ -91,7 +91,7 @@ function extract
         log_error "No archives found inside target directory."
         exit 2
     end
-    
+
     save_docker_compose_state "$target"
 
     set -l index 0
@@ -105,7 +105,7 @@ function extract
         if test "$archive_basename" = "$stop_at"
             log_info "The required archive reached. Stop processing"
             break
-        end    
+        end
     end
 
     restore_docker_compose_state
@@ -116,14 +116,14 @@ end
 function verify
     set -l archive_dir "$argv[1]"
     set -e argv[1]
-    
+
     if not test_readable "$archive_dir"
         log_error "Archive directory '$archive_dir' is not readable or does not exist."
         exit 1
     end
 
     set -l total (get_archives "$archive_dir" | wc -l)
-    
+
     if test $total -eq 0
         log_error "No archives found inside target directory."
         exit 2
@@ -132,7 +132,7 @@ function verify
     set -l index 0
     get_archives "$archive_dir" | while read -l archive_basename
         set index (math $index + 1)
-        
+
         log_info "[$index/$total] Verifying '$archive_basename'..."
         if not dar --test "$archive_dir/$archive_basename" -Q --quiet $argv
             log_error "[$index/$total] Verification of '$archive_basename' failed."
@@ -152,7 +152,7 @@ function compare
         log_error "Archive directory '$archive_dir' is not readable or does not exist."
         exit 1
     end
-    
+
     if not test_readable "$source"
         log_error "Source directory '$source' is not readable or does not exist."
         exit 1
@@ -162,7 +162,7 @@ function compare
         log_error "Temporary directory '$temp_dir' is not writable or does not exist."
         exit 1
     end
-    
+
     set -l temp (mktemp --directory --tmpdir="$temp_dir")
     set -a temp_files $temp
     set -l source_temp "$temp/source"
@@ -178,7 +178,7 @@ function compare
 
     log_info "Extracting files from archive..."
     extract "$archive_dir" "$archive_temp" -O $argv
-    
+
     set results (diff -rq "$source_temp" "$archive_temp" | grep -vE " is a socket|Special file" 2>&1 | string collect)
 
     if test (count $results) -gt 0
@@ -239,11 +239,11 @@ function restore_docker_compose_state
                 log_info "Docker Compose containers state changed to $output"
             end
         end
-        
+
         # Calculate time elapsed using date timestamps
         set -l current_time (date +%s)
         set -l time_elapsed (math $current_time - $start_time)
-        
+
         if test $time_elapsed -ge $docker_compose_healthy_wait_timeout
             log_error "Timed out waiting for Docker Compose containers healthy state after $time_elapsed seconds."
             exit 1
@@ -255,7 +255,7 @@ end
 
 function is_docker_compose_stopped
     set -l state (timeout $docker_compose_action_timeout "$argv[1]" status)
-    test "$state" = "none"; and return 0
+    test "$state" = none; and return 0
     return 1
 end
 
@@ -295,19 +295,37 @@ function remove
 end
 
 function log_info
-    set_color cyan; echo -s "ℹ️  Info:     " $argv; set_color normal
+    set_color cyan
+    echo -s "ℹ️  Info:     " $argv | number_format
+    set_color normal
 end
 
 function log_success
-    set_color green; echo -s "✅ Success:  " $argv; set_color normal
+    set_color green
+    echo -s "✅ Success:  " $argv | number_format
+    set_color normal
 end
 
 function log_error
-    set_color red; echo -s "❌ Error:    " $argv; set_color normal
+    set_color red
+    echo -s "❌ Error:    " $argv | number_format
+    set_color normal
 end
 
 function log_checking
-    set_color cyan; echo -s "🔍 Checking: " $argv; set_color normal
+    set_color cyan
+    echo -s "🔍 Checking: " $argv | number_format
+    set_color normal
+end
+
+function number_format
+    while read -l line
+        for num in (string match -ra '\d+' -- "$line" | sort -rn)
+            set -l formatted (echo $num | env LC_NUMERIC=fr_FR.UTF-8 numfmt --grouping)
+            set line (string replace -a -- $num $formatted "$line")
+        end
+        echo $line
+    end
 end
 
 function on_exit --on-event fish_exit
@@ -326,7 +344,6 @@ end
 
 set -l action $argv[1]
 set -e argv[1]
-
 
 switch "$action"
     case create
