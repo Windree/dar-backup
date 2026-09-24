@@ -54,8 +54,8 @@ function create
 
     restore_docker_compose_state
 
-    set -l size (du --total --bytes "$temp" | tail -n 1 | cut -f 1)
-    set -l count (find "$temp" -type f | wc -l)
+    set -l size (du --total --bytes "$temp" | tail -n 1 | cut -f 1 | number_format)
+    set -l count (find "$temp" -type f | wc -l | number_format)
 
     if not mv "$temp"/* "$target"
         log_error "Failed to move created archive to persistent storage."
@@ -86,7 +86,7 @@ function extract
         exit 1
     end
 
-    set -l count (get_archives "$archive_dir" | wc -l)
+    set -l count (get_archives "$archive_dir" | wc -l | number_format)
     if test $count -eq 0
         log_error "No archives found inside target directory."
         exit 2
@@ -122,7 +122,7 @@ function verify
         exit 1
     end
 
-    set -l total (get_archives "$archive_dir" | wc -l)
+    set -l total (get_archives "$archive_dir" | wc -l | number_format)
 
     if test $total -eq 0
         log_error "No archives found inside target directory."
@@ -296,25 +296,25 @@ end
 
 function log_info
     set_color cyan
-    echo -s "ℹ️  Info:     " $argv | number_format
+    echo -s "ℹ️  Info:     " $argv
     set_color normal
 end
 
 function log_success
     set_color green
-    echo -s "✅ Success:  " $argv | number_format
+    echo -s "✅ Success:  " $argv
     set_color normal
 end
 
 function log_error
     set_color red
-    echo -s "❌ Error:    " $argv | number_format
+    echo -s "❌ Error:    " $argv
     set_color normal
 end
 
 function log_checking
     set_color cyan
-    echo -s "🔍 Checking: " $argv | number_format
+    echo -s "🔍 Checking: " $argv
     set_color normal
 end
 
